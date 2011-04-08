@@ -1,0 +1,18 @@
+// $Id$
+
+REQUIREMENTS
+------------
+Required modules:
+  CCK Module.
+  Filefield Module.
+  Video Module.
+  Mediamosa client Module.
+
+INSTALL INSTRUCTIONS
+--------------------
+
+1. Enable the module
+2. Go to the transcoder settings of video
+3. Choose mediamosa as the transcoder
+4. provide mediamosa credentials and save the form
+5. configure the other mediamosa settings

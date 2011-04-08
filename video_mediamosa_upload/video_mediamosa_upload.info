@@ -1,0 +1,9 @@
+package = "Video"
+name = Mediamosa Video Upload
+description = Creates a CCK field to upload a video directly to a Mediamosa server
+dependencies[] = video
+dependencies[] = video_mediamosa
+dependencies[] = mediamosa_client
+dependencies[] = content
+dependencies[] = filefield
+core = 6.x

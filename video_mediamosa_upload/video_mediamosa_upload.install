@@ -1,0 +1,57 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Installation for Video Mediamosa Upload
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function video_mediamosa_upload_install() {
+  drupal_load('module', 'content');
+  content_notify('install', 'video_mediamosa_upload');
+  
+  // Add imagecache filter for thumbnail choice in the widget value settings
+  if (module_exists('imagecache')) {
+    $imagecachepreset = imagecache_preset_save(array('presetname' => 'video_mediamosa_thumbchoice'));
+    $imagecacheaction = new stdClass ();
+    $imagecacheaction->presetid = $imagecachepreset['presetid'];
+    $imagecacheaction->module = 'imagecache';
+    $imagecacheaction->action = 'imagecache_scale_and_crop';
+    $imagecacheaction->data = array('width' => '75', 'height' => '75' );
+    drupal_write_record('imagecache_action', $imagecacheaction);
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function video_mediamosa_upload_uninstall() {
+  drupal_load('module', 'content');
+  content_notify('uninstall', 'video_mediamosa_upload');
+  
+  if (module_exists('imagecache')) {
+    imagecache_preset_delete(imagecache_preset_by_name('video_mediamosa_thumbchoice'));
+  }
+}
+
+/**
+* Implementation of hook_enable().
+*
+* Notify content module when this module is enabled.
+*/
+function video_mediamosa_upload_enable() {
+  drupal_load('module', 'content');
+  content_notify('enable', 'video_mediamosa_upload');
+}
+
+/**
+* Implementation of hook_disable().
+*
+* Notify content module when this module is disabled.
+*/
+function video_mediamosa_upload_disable() {
+  drupal_load('module', 'content');
+  content_notify('disable', 'video_mediamosa_upload');
+}

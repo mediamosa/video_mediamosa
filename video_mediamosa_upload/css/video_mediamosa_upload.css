@@ -1,0 +1,35 @@
+.form-radios.video_mediamosa_upload-thumbnail-selection {
+  width   : 100%;
+  overflow: auto;
+}
+.video_mediamosa_upload-thumbnail-selection .form-option {
+  float: left;
+}
+.video_mediamosa_upload_progress {
+  background: transparent url(images/progress.gif) repeat-x scroll 0 -15px;
+  height    : 15px;
+  width     : 200px;
+  padding   : 0;
+  position  : relative;
+  border    : 1px solid #000000;
+}
+.video_mediamosa_upload_progress .progress_bar {
+  position  : absolute;
+  left      : 0;
+  top       : 0;
+  background: transparent url(images/progress.gif) repeat-x scroll 0 0px;
+  height    : 15px;
+  width     : 0px;
+  margin    : 0;
+  padding   : 0;
+}
+.video_mediamosa_upload_progress .progress_text {
+  text-align : center;
+  font-size  : 11px;
+  font-weight: bold;
+  line-height: 11px;
+  color      : #ffffff;
+  padding    : 2px 0 0 0;
+  position   : relative;
+  z-index    : 1;
+}

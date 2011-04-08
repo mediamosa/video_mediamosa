@@ -1,0 +1,185 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Provides installation functions for video_mediamosa.
+ */
+
+/**
+ * Implementation of hook_schema().
+ */
+function video_mediamosa_schema() {
+  $schema['video_mediamosa'] = array(
+    'description' => t('Extension table on file for video files.'),
+    'fields' => array(
+      'fid' => array(
+        'description' => t('Original file id'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => t('Time of creation.'),
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => t('Time of last update.'),
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'description' => t('Node id'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'asset_id' => array(
+        'description' => t('Asset id'),
+        'type' => 'varchar',
+        'length' => 50,
+        'default' => '',
+      ),
+      'src_mediafile_id' => array(
+        'description' => t('Source mediafile id'),
+        'type' => 'varchar',
+        'length' => 50,
+        'default' => '',
+      ),
+      'transcode_ids' => Array(
+        'description' => t('Transcode ids'),
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'thumbnail_fid' => Array(
+        'description' => t('The main thumbnail file id'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'default' => 0,
+      ),
+      'thumbnails' => array(
+        'description' => t('Thumbnail fids'),
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'default' => 0,
+        'description' => t('The status of the asset.'),
+      ),
+    ),
+    'indexes' => array(
+      'status' => array('status'),
+      'asset_id' => array('asset_id'),
+      'nid' => array('nid'),
+    ),
+    'primary key' => array('fid'),
+  );
+  $schema['video_mediamosa_mediafile'] = array(
+    'description' => t('Extension table on file for video files.'),
+    'fields' => array(
+      'fid' => array(
+        'description' => t('Original file id'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => t('Time of creation.'),
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => t('Time of last update.'),
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'asset_id' => array(
+        'description' => t('Asset id'),
+        'type' => 'varchar',
+        'length' => 50,
+        'default' => '',
+      ),
+      'mediafile_id' => array(
+        'description' => t('Mediafile id'),
+        'type' => 'varchar',
+        'length' => 50,
+        'default' => '',
+      ),
+      'transcode_id' => array(
+        'description' => t('Transcode id'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'default' => 0,
+      ),
+      'meta_data' => array(
+        'description' => t('Meta data'),
+        'type' => 'text',
+        'default' => '',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'default' => 0,
+        'description' => t('The status of the mediafile.'),
+      ),
+    ),
+    'indexes' => array(
+      'fid' => array('fid'),
+      'mediafile_id' => array('mediafile_id'),
+      'transcode_id' => array('transcode_id'),
+      'status' => array('status'),
+    ),
+    'primary key' => array('asset_id', 'mediafile_id'),
+  );
+  return $schema;
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function video_mediamosa_install() {
+  //Add tables
+  drupal_install_schema('video_mediamosa');
+  
+  //Set weight to -1 to make sure our video_mediamosa_load hook is called before all others.
+  db_query("UPDATE {system} SET weight=-1 WHERE name = '%s'", "video_mediamosa");
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function video_mediamosa_uninstall() {
+  drupal_uninstall_schema('video_mediamosa');
+  
+  variable_del('video_mediamosa_transcode');
+  variable_del('video_mediamosa_use_rest_interface');
+  variable_del('video_mediamosa_masquerade_owner');
+  variable_del('video_mediamosa_username');
+  variable_del('video_mediamosa_password');
+  variable_del('video_mediamosa_uri');
+  variable_del('video_mediamosa_app_id');
+  variable_del('video_mediamosa_transcode');
+  variable_del('video_mediamosa_transcode_main_profile');
+  variable_del('video_mediamosa_download_videos');
+  variable_del('video_mediamosa_keep_source');
+  variable_del('video_mediamosa_remove_downloaded_asset');
+  variable_del('video_mediamosa_files_path');
+  variable_del('video_mediamosa_files_still_path');
+  variable_del('video_mediamosa_still_type');
+  variable_del('video_mediamosa_still_startframe');
+  variable_del('video_mediamosa_still_endframe');
+  variable_del('video_mediamosa_still_every_second');
+  variable_del('video_mediamosa_num_still_per_mediafile');
+  variable_del('video_mediamosa_debug');
+}

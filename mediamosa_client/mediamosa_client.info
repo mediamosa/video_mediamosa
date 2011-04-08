@@ -1,0 +1,4 @@
+package = "MediaMosa - Client"
+name = Mediamosa client
+description = Client for talking to a MediaMosa server
+core = 6.x

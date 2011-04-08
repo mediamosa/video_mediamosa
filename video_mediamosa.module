@@ -1,0 +1,248 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Provides installation functions for video_mediamosa.module.
+ */
+
+/** 
+ * New video
+ */
+define('VIDEO_MEDIAMOSA_STATUS_NEW'      , 0);
+
+/** 
+ * Video locally available and ready to upload
+ */
+define('VIDEO_MEDIAMOSA_STATUS_QUEUED'   , 1);
+
+/** 
+ * Video is currently beeing uploaded to the mediamosa server
+ */
+define('VIDEO_MEDIAMOSA_STATUS_UPLOADING', 2);
+
+/** 
+ * Video has been uploaded, waiting for encoding
+ */
+define('VIDEO_MEDIAMOSA_STATUS_UPLOADED' , 3);
+
+/** 
+ * Mediamosa is encoding the video
+ */
+define('VIDEO_MEDIAMOSA_STATUS_ENCODING' , 4);
+
+/** 
+ * Video is encoded and ready to localize to this drupal instance
+ */
+define('VIDEO_MEDIAMOSA_STATUS_ENCODED'  , 5);
+
+/**
+ * Video successfully localized and can now be played
+ */
+define('VIDEO_MEDIAMOSA_STATUS_SUCCESS'  , 6);
+
+/**
+ * Video encoding failed permenantly.
+ */
+define('VIDEO_MEDIAMOSA_STATUS_FAILED'   , 7);
+
+require_once drupal_get_path('module', 'video') .'/includes/transcoder.inc';
+require_once drupal_get_path('module', 'video_mediamosa') .'/transcoders/video_mediamosa.inc';
+
+function video_mediamosa_menu() {
+  $items = Array(
+    'video_mediamosa/%/status_update' => Array(
+      'description'      => t('Called after mediamosa is finished transcoding a file'),
+      'page callback'    => 'video_mediamosa_status_update',
+      'page arguments'   => array(1),
+      'access arguments' => array('access content'),
+      'type'             => MENU_CALLBACK
+    )
+  );
+  
+  return $items;
+}
+
+/**
+ * Callback for mediamosa server.
+ * 
+ * Updates the status of a mediafile (identified by a get param) and, if all
+ * mediafiles within the asset are encoded, updates the asset to status encoded.
+ * 
+ * @param $fid the file id
+ */
+function video_mediamosa_status_update($fid) {
+  watchdog('video_mediamosa', $_SERVER['REQUEST_URI']);
+  $video_mediamosa = new video_mediamosa();
+  $video = $video_mediamosa->load($fid);
+  
+  //The main video, don't do anything
+  if($video->mediafile_id == $_GET['mediafile_id']) {
+    exit;
+  }
+  
+  //Set status according to status_code from mediamosa.
+  switch ($_GET['status_code']) {
+    case 'FINISHED':
+      $encoding_status = VIDEO_MEDIAMOSA_STATUS_ENCODED;
+      break;
+    case 'INPROGRESS':
+      $encoding_status = VIDEO_MEDIAMOSA_STATUS_ENCODING;
+      break;
+  }
+  
+  if (!empty($_GET['mediafile_id']) && !empty($encoding_status)) {
+    //Asset allready has mediafiles, try to find the matching mediafile
+    if (!empty($video->mediafiles[$$mediafile_id])) {
+      $video->mediafiles[$$mediafile_id]->status = $encoding_status;
+    }
+    else {
+      $mediafile = new stdClass();
+      $mediafile->asset_id     = $video->asset_id;
+      $mediafile->mediafile_id = $_GET['mediafile_id'];
+      $mediafile->status       = $encoding_status;
+      
+      //Update video, adds a mediafile with status encoded.
+      if (empty($video->mediafiles)) {
+        $video->mediafiles = array();
+      }
+      $video->mediafiles[$_GET['mediafile_id']] = $mediafile; 
+    }
+    
+    //If the video is encoded, check if all videos are done, if so:
+    //update the asset to status encoded
+    if ($encoding_status > (int) $video->status) {
+      //First check if num videos correspond.
+      if (!empty($video->transcode_ids) && 
+       count(explode(',', $video->transcode_ids)) == count($video->mediafiles)) {
+        //Now loop through all mediafiles and check if they are encoded
+        $update_status = TRUE;
+        foreach ($video->mediafiles AS $mediafile) {
+          if ($mediafile->status != $encoding_status) {
+            $update_status = FALSE;
+          }
+        }
+        if ($update_status == TRUE) {
+          $video->status = $encoding_status;
+        }
+      }
+    }
+  }
+  $video_mediamosa->update($video);
+}
+  
+  /**
+ * Cron, handles uploading to mediamosa and downloading.
+*/
+function video_mediamosa_cron() {
+  global $user;
+  $admin = user_load(array('uid' => 1));
+  $user = $admin;
+  
+  $VideoMediamosa = new video_mediamosa();
+  $VideoMediamosa->processQueue();
+  $VideoMediamosa->localizeVideos();
+}
+
+/**
+ * Submit handler to update our table to include the node id.
+*/
+function video_mediamosa_video_update($form, &$form_state) {
+  if (isset($form_state['nid']) && isset($form_state['values']['video_id']) && 
+   is_array($form_state['values']['video_id'])) {
+    foreach ($form_state['values']['video_id'] as $fid) {
+      $VideoMediamosa = new video_mediamosa();
+      $video = new stdClass();
+      $video->fid = $fid;
+      $video->nid = $form_state['nid'];
+      
+      $VideoMediamosa->update($video);
+    }
+  }
+}
+
+/**
+ * Insert a video in into the video_mediamosa table with the status queued.
+ * 
+ * @param <type> $element
+ * @param <type> $form_state
+ */
+function video_mediamosa_video_insert(&$element, &$form_state) {
+  $file = $element['#value'];
+  //we need to check if this fid has already been added to the database AND that there is in fact a fid
+  if (is_array($file) && isset($file['fid']) && !empty($file['fid'])) {
+    $VideoMediamosa = new video_mediamosa();
+    // Lets verify that we haven't added this video already.  Multiple 
+    //validation fails will cause this to be ran more than once
+    if ($VideoMediamosa->load($file['fid']) == FALSE) {
+      $video = new stdClass();
+      $video->fid = $file['fid'];
+      $video->status = VIDEO_MEDIAMOSA_STATUS_QUEUED;
+      // Video has not been added to the queue yet so lets add it.
+      $VideoMediamosa->insert($video);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_video_delete.
+ * we can use hook_file_delete()
+ */
+function video_mediamosa_video_delete($video) {
+  //Delete asset in mediamosa
+  $VideoMediamosa = new video_mediamosa();
+  $VideoMediamosa->delete($video);
+}
+
+/**
+ * Include mediafiles and stills and set the main video as the current video.
+ */
+function video_mediamosa_video_load(&$video) {
+  $VideoMediamosa = new video_mediamosa();
+  
+  $transcode_id           = array_filter(variable_get('video_mediamosa_transcode', ''));
+  $transcode_main_profile = variable_get('video_mediamosa_transcode_main_profile', '');
+  if (empty($transcode_main_profile) && !empty($transcode_id)) {
+    $transcode_main_profile = $transcode_id[0];
+  }
+  $video_data = $VideoMediamosa->load($video->fid);
+  
+  if (!empty($video_data->mediafiles)) {
+    $video->mediafiles = $video_data->mediafiles;
+  }
+  
+  //Transcoded video, if video is available it's playable.
+  if (!empty($transcode_main_profile)) {
+    //Lookup main video
+    $main_mediafile = NULL;
+    if (!empty($video->mediafiles)) {
+      foreach ($video->mediafiles AS $mediafile) {
+        if ($mediafile->transcode_id == $transcode_main_profile) {
+          $main_mediafile = $mediafile;
+          break;
+        }
+      }
+    }
+    if (!empty($main_mediafile)) {
+      $video->fid          = $main_mediafile->fid;
+      $video->filepath     = $main_mediafile->filepath;
+      $video->url          = base_path() . $main_mediafile->filepath;
+      $video->extension    = pathinfo($main_mediafile->filepath, PATHINFO_EXTENSION);
+      $video->video_status = VIDEO_RENDERING_COMPLETE;
+    }
+    else {
+      //Non playable video, busy transcoding
+      $video->video_status = VIDEO_RENDERING_ACTIVE;
+    }
+  }
+  //Non transcoded video and file is available, video is playable
+  elseif (!empty($video_data->filepath)) {
+    $video->filepath     = $video_data->filepath;
+    $video->url          = base_path() . $video_data->filepath;
+    $video->extension    = pathinfo($video_data->filepath, PATHINFO_EXTENSION);
+    $video->video_status = VIDEO_RENDERING_COMPLETE;
+  }
+  //Non playable video, non transcoded and there is no local file (this shouldn't happen, therefore status = failed).
+  else {
+    $video->video_status = VIDEO_RENDERING_FAILED;
+  }
+}

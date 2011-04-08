@@ -1,0 +1,181 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Upload field CCK widget that uploads directly to the mediamosa platform
+ *
+ * By skipping the local server you save bandwidth when the user uploads a 
+ * video. The widget also adds a progress bar when uploading the image.
+ */
+
+module_load_include('inc', 'video_mediamosa_upload', 'video_mediamosa_upload.widget');
+
+/**
+ * Supporting menu hooks, called from javascript via AJAX
+ */
+function video_mediamosa_upload_menu() {
+  $menu_items = array();
+  
+  $menu_items['video_mediamosa_upload/ajax/request_upload'] = array(
+    'file'             => 'video_mediamosa_upload.ajax.inc',
+    'page callback'    => 'video_mediamosa_upload_ajax_request_upload',
+    'access arguments' => array('access content'),
+    'type'             => MENU_CALLBACK,
+    'description'      => t('Ajax request to request video information')
+  );
+  $menu_items['video_mediamosa_upload/ajax/request_uploadprogress'] = array(
+    'file'             => 'video_mediamosa_upload.ajax.inc',
+    'page callback'    => 'video_mediamosa_upload_ajax_request_upload_progress',
+    'access arguments' => array('access content'),
+    'type     '        => MENU_CALLBACK,
+    'description'      => t('Ajax request to request video upload progress')
+  );
+  return $menu_items;
+}
+
+/**
+ * Themes required for the upload widget.
+ */
+function video_mediamosa_upload_theme() {
+  return array(
+    'video_mediamosa_upload_iframe'  => array(
+      'template'  => 'templates/video_mediamosa_upload_iframe',
+      'arguments' => array('element' => NULL),
+    ),
+    'video_mediamosa_upload_widget' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'video_mediamosa_upload_widget_item' => array(
+      'arguments' => array('element' => NULL),
+    )
+  );
+}
+
+/**
+ * CCK hook, information about the widget
+ */
+function video_mediamosa_upload_widget_info() {
+  return array(
+    'video_mediamosa_upload_widget' => array(
+      'label'           => t('Mediamosa Video'),
+      'field types'     => array('filefield'),
+      'multiple values'	=>  CONTENT_HANDLE_CORE,
+      'callbacks'       => array('default value' => CONTENT_CALLBACK_CUSTOM),
+      'description'     => t('An edit widget for video files, include upload to mediamosa server for file transcoding.'),
+    )
+  );
+}
+
+/**
+ * Implementation of hook_elements().
+ */
+function video_mediamosa_upload_elements() {
+  $elements = array();
+  $filefield_elements = module_invoke( 'filefield', 'elements' );
+  $elements ['video_mediamosa_upload_widget'] = $filefield_elements ['filefield_widget'];
+  $elements ['video_mediamosa_upload_widget'] ['#process'] [] = 'video_mediamosa_upload_widget_process';
+  $elements ['video_mediamosa_upload_widget'] ['#element_validate'] [] = 'video_mediamosa_upload_widget_validate';
+  $elements ['video_mediamosa_upload_widget'] ['#value_callback'] = 'video_mediamosa_upload_widget_value';
+  return $elements;
+}
+
+/**
+ * Implementation of hook_file_download.
+ */
+function video_mediamosa_upload_file_download($filepath) {
+  // Return headers for default images.
+  if (strpos($filepath, 'video_thumbs') !== FALSE) {
+    $full_path = file_create_path($filepath);
+    if ($info = getimagesize($full_path)) {
+      return array(
+        'Content-Type: ' . $info['mime'],
+        'Content-Length: ' . filesize($full_path)
+      );
+    }
+  }
+}
+
+/**
+ * Implementation of CCK's hook_widget_settings().
+ */
+function video_mediamosa_upload_widget_settings($op, $widget) {
+  switch ($op) {
+    case 'form' :
+      return video_mediamosa_upload_widget_settings_form($widget);
+    case 'save' :
+      return video_mediamosa_upload_widget_settings_save($widget);
+  }
+}
+
+function video_mediamosa_upload_widget_submit($form, $form_state) {
+  $mediamosa_upload_widgets = array();
+  foreach ($form as $field_name => $element) {
+    if (isset($element) && 
+     is_array($element) && isset($element[0]['#type']) && 
+     $element[0]['#type'] == 'video_mediamosa_upload_widget') {
+      $mediamosa_upload_widgets[] = $field_name;
+    }
+  }
+  foreach ($mediamosa_upload_widgets as $field) {
+    foreach ($form_state['clicked_button']['#post'][$field] as $value) {
+      $video_mediamosa = new video_mediamosa();
+      $video = $video_mediamosa->load($value['fid']);
+      if ($video->status < VIDEO_MEDIAMOSA_STATUS_ENCODING) {
+        $video->status = VIDEO_MEDIAMOSA_STATUS_ENCODING;
+        $video_mediamosa->update($video);
+      }
+    }
+  }
+}
+
+function video_mediamosa_upload_widget(&$form, &$form_state, $field, $items, $delta = 0) {
+  $form['#submit'][] = 'video_mediamosa_upload_widget_submit';
+  
+  return filefield_widget($form, $form_state, $field, $items, $delta);
+}
+
+/**
+ * Implementation of CCK's hook_default_value().
+ */
+function video_mediamosa_upload_default_value(&$form, &$form_state, $field, $delta) {
+  return filefield_default_value($form, $form_state, $field, $delta);
+}
+
+/**
+ * Implementation of hook_form_[form_id]_alter().
+ *
+ * Modify the add new field form to make "Video" the default formatter.
+ */
+function video_mediamosa_upload_form_content_field_overview_form_alter(&$form, &$form_state) {
+  $form['#submit'][] = 'video_mediamosa_upload_form_content_field_overview_submit';
+}
+
+/**
+ * Submit handler to set a new field's formatter to "video_plain".
+ */
+function video_mediamosa_upload_form_content_field_overview_submit(&$form, &$form_state) {
+  if (isset($form_state['fields_added']['_add_new_field']) && isset($form['#type_name'])) {
+    $new_field = $form_state['fields_added']['_add_new_field'];
+    $node_type = $form['#type_name'];
+    $field = content_fields($new_field, $node_type);
+    if ($field['widget']['module'] == 'video_mediamosa_upload') {
+      foreach ($field ['display_settings'] as $display_type => $display_settings) {
+        if ($field['display_settings'][$display_type]['format'] == 'default') {
+          $field['display_settings'][$display_type]['format'] = 'video_plain';
+        }
+      }
+      content_field_instance_update($field);
+    }
+  }
+}
+
+/**
+ * FormAPI theme function. Theme the output of an video upload field.
+ */
+function theme_video_mediamosa_upload_widget($element) {
+  return theme('form_element', $element, $element['#children']);
+}
+
+function theme_video_mediamosa_upload_widget_item($element) {
+  return theme('filefield_widget_item', $element);
+}

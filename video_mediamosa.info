@@ -1,0 +1,6 @@
+package = "Video"
+name = Mediamosa transcoder
+description = Defines a mediamosa transcoder for the Video module
+dependencies[] = video
+dependencies[] = mediamosa_client
+core = 6.x
